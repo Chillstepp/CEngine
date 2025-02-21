@@ -1,0 +1,8 @@
+# Ignore the ExternalZip folder
+ExternalZip/
+
+# Ignore the .idea folder (CLion project settings)
+.idea/
+
+# Ignore the cmake-build-debug folder (CLion build output)
+cmake-build-debug/
