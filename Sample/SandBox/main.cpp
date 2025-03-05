@@ -10,6 +10,7 @@
 #include "Graphics/CEDescriptorPool.h"
 #include "Graphics/CEVulkanImageView.h"
 #include "Render/CETexture.h"
+#include "Render/CERenderer.h"
 
 
 struct GlobalUbo{
@@ -74,6 +75,7 @@ struct InstanceUbo{
 		 mRenderTarget->SetColorClearValue({0.1f, 0.2f, 0.3f, 1.f});
 		 mRenderTarget->SetDepthStencilClearValue({ 1, 0 });
 
+		 mRenderer = std::make_shared<CE::CERenderer>();
 
 		 //descriptor set
 		 std::vector<VkDescriptorSetLayoutBinding> desctLayoutBindings = {
@@ -164,31 +166,9 @@ struct InstanceUbo{
 
 		 mGlobalBuffer = std::make_shared<CE::CEVulkanBuffer>(device, VkBufferUsageFlagBits::VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(GlobalUbo),nullptr, true);
 		 mInstanceBuffer = std::make_shared<CE::CEVulkanBuffer>(device, VkBufferUsageFlagBits::VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(InstanceUbo),nullptr, true);
-		 mTexture0 = std::make_shared<CE::CETexture>(CE_RES_TEXTURE_DIR"awesomeface.png");
+		 mTexture0 = std::make_shared<CE::CETexture>(CE_RES_TEXTURE_DIR"bird.jpg");
 		 mTexture1 = std::make_shared<CE::CETexture>(CE_RES_TEXTURE_DIR"R-C.jpeg");
 
-		 mImageAvailableSemaphores.resize(mNumBuffer);
-		 mSubmitedSemaphores.resize(mNumBuffer);
-		 mFrameFences.resize(mNumBuffer);
-
-		 VkSemaphoreCreateInfo semaphoreCreateInfo = {
-			 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-			 .pNext = nullptr,
-			 .flags = 0
-		 };
-
-		 VkFenceCreateInfo fenceCreateInfo = {
-			 .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-			 .pNext = nullptr,
-			 .flags = VK_FENCE_CREATE_SIGNALED_BIT //创建后立刻生效
-		 };
-
-		 for(int i = 0; i < mNumBuffer; i++)
-		 {
-			 CALL_VK(vkCreateSemaphore(device->GetHandle(), &semaphoreCreateInfo, nullptr, &mImageAvailableSemaphores[i]));
-			 CALL_VK(vkCreateSemaphore(device->GetHandle(), &semaphoreCreateInfo, nullptr, &mSubmitedSemaphores[i]));
-			 CALL_VK(vkCreateFence(device->GetHandle(), &fenceCreateInfo, nullptr, &mFrameFences[i]));
-		 }
 
 		 mCmdBuffers = device->GetDefaultCommandPool()->AllocateCommandBuffer(swapchain->GetImages().size());
 
@@ -220,24 +200,9 @@ struct InstanceUbo{
 		 CE::CEVulkanLogicDevice *device = renderCxt->GetDevice();
 		 CE::CESwapchain *swapchain = renderCxt->GetSwapchain();
 
-		 CALL_VK(vkWaitForFences(device->GetHandle(), 1, &mFrameFences[mCurrentBuffer], VK_TRUE, UINT64_MAX));
-		 CALL_VK(vkResetFences(device->GetHandle(), 1, &mFrameFences[mCurrentBuffer]));
-
 		 int32_t imageIndex;
-		 VkResult ret = swapchain->AcquireImage(&imageIndex, mImageAvailableSemaphores[mCurrentBuffer]);
-		 if(ret == VK_ERROR_OUT_OF_DATE_KHR){
-			 CALL_VK(vkDeviceWaitIdle(device->GetHandle())); // Wait render finish to recreate
-			 VkExtent2D originExtent = { swapchain->GetWidth(), swapchain->GetHeight() };
-			 bool bSuc = swapchain->Recreate();
-
-			 VkExtent2D newExtent = { swapchain->GetWidth(), swapchain->GetHeight() };
-			 if(bSuc && (originExtent.width != newExtent.width || originExtent.height != newExtent.height)){
-				 mRenderTarget->SetExtent(newExtent);
-			 }
-			 ret = swapchain->AcquireImage(&imageIndex, mImageAvailableSemaphores[mCurrentBuffer]);
-			 if(ret != VK_SUCCESS && ret != VK_SUBOPTIMAL_KHR){
-				 LOG_E("Recreate swapchain error: {0}", vk_result_string(ret));
-			 }
+		 if(mRenderer->Begin(&imageIndex)){
+			 mRenderTarget->SetExtent({ swapchain->GetWidth(), swapchain->GetHeight() });
 		 }
 
 		 VkCommandBuffer cmdBuffer = mCmdBuffers[imageIndex];
@@ -273,21 +238,10 @@ struct InstanceUbo{
 		 mRenderTarget->End(cmdBuffer);
 
 		 CE::CEVulkanCommandPool::EndCommandBuffer(cmdBuffer);
-		 device->GetFirstGraphicQueue()->Submit({ cmdBuffer }, { mImageAvailableSemaphores[mCurrentBuffer] }, { mSubmitedSemaphores[mCurrentBuffer] }, mFrameFences[mCurrentBuffer]);
-		 ret = swapchain->Present(imageIndex, { mSubmitedSemaphores[mCurrentBuffer] });
 
-		 if(ret == VK_SUBOPTIMAL_KHR){
-			 CALL_VK(vkDeviceWaitIdle(device->GetHandle()));
-			 VkExtent2D originExtent = { swapchain->GetWidth(), swapchain->GetHeight() };
-			 bool bSuc = swapchain->Recreate();
-
-			 VkExtent2D newExtent = { swapchain->GetWidth(), swapchain->GetHeight() };
-			 if(bSuc && (originExtent.width != newExtent.width || originExtent.height != newExtent.height)){
-				 mRenderTarget->SetExtent(newExtent);
-			 }
+		 if(mRenderer->End(imageIndex, { cmdBuffer })){
+			 mRenderTarget->SetExtent({ swapchain->GetWidth(), swapchain->GetHeight() });
 		 }
-
-		 mCurrentBuffer = (mCurrentBuffer + 1) % mNumBuffer;
 	 }
 
 	 void OnDestroy() override {
@@ -307,11 +261,8 @@ struct InstanceUbo{
 		 mPipelineLayout.reset();
 		 mRenderTarget.reset();
 		 mRenderPass.reset();
-		 for(int i = 0; i < mNumBuffer; i++){
-			 VK_D(Semaphore, device->GetHandle(), mImageAvailableSemaphores[i]);
-			 VK_D(Semaphore, device->GetHandle(), mSubmitedSemaphores[i]);
-			 VK_D(Fence, device->GetHandle(), mFrameFences[i]);
-		 }
+		 mRenderer.reset();
+
 	 }
 
 	 void UpdateDescriptorSets(){
@@ -390,14 +341,17 @@ struct InstanceUbo{
 
 
   private:
+
 		 std::shared_ptr<CE::CEVulkanRenderPass> mRenderPass;
 		 std::shared_ptr<CE::CERenderTarget> mRenderTarget;
+		 std::shared_ptr<CE::CERenderer> mRenderer;
 		 std::shared_ptr<CE::CEVulkanPipelineLayout> mPipelineLayout;
 		 std::shared_ptr<CE::CEVulkanPipeline> mPipeline;
 
 		 std::shared_ptr<CE::CEDescriptorSetLayout> mDescriptorSetLayout;
 		 std::shared_ptr<CE::CEDescriptorPool> mDescriptorPool;
 		 std::vector<VkDescriptorSet> mDescriptorSets;
+
 
 		 GlobalUbo mGlobalUbo;
 		 std::shared_ptr<CE::CEVulkanBuffer> mGlobalBuffer;
@@ -412,11 +366,6 @@ struct InstanceUbo{
 		 std::shared_ptr<CE::CEMesh> mCubeMesh;
 
 
-		 const uint32_t mNumBuffer = 2;
-		 uint32_t mCurrentBuffer = 0;
-		 std::vector<VkSemaphore> mImageAvailableSemaphores;
-		 std::vector<VkSemaphore> mSubmitedSemaphores;
-		 std::vector<VkFence> mFrameFences;
  };
 
 

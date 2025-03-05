@@ -7,6 +7,7 @@ add_library(CECore STATIC
         Private/Render/CEMesh.cpp
         Private/Render/CERenderTarget.cpp
         Private/Render/CETexture.cpp
+        Private/Render/CERenderer.cpp
 )
 
 target_link_libraries(CECore PUBLIC CEPlatform)
