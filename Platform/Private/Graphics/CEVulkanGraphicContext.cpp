@@ -12,6 +12,7 @@ namespace CE{
 
 	const DeviceFeature RequestedExtensions[] = {
 		{VK_KHR_SURFACE_EXTENSION_NAME, true},
+		{VK_EXT_DEBUG_REPORT_EXTENSION_NAME, true},
 #ifdef CE_ENGINE_PLATFORM_WIN32
 		{ VK_KHR_WIN32_SURFACE_EXTENSION_NAME, true },
 #elif CE_ENGINE_PLATFORM_MACOS
