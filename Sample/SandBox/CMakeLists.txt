@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.23)
 
 set(SHADERS
-        02_descriptor_set.vert
-        02_descriptor_set.frag
+        01_hello_buffer.vert
+        01_hello_buffer.frag
 )
 
 spirv_shaders(

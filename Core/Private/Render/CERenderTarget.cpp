@@ -31,7 +31,11 @@ namespace CE{
 
 	CERenderTarget::~CERenderTarget()
 	{
-
+		for(const auto& materialSystemItem: mMaterialSystemList)
+		{
+			materialSystemItem->OnDestroy();
+		}
+		mMaterialSystemList.clear();
 	}
 
 	void CERenderTarget::Begin(VkCommandBuffer cmdBuffer)

@@ -10,11 +10,12 @@ out gl_PerVertex{
 
 layout(push_constant) uniform PushConstants{
     mat4 matrix;
+    uint colorType;
 } PC;
 
 out layout(location=0) vec4 vertexColor;
 
 void main() {
     gl_Position = PC.matrix * vec4(a_Pos.x, -a_Pos.y, a_Pos.z, 1.f);
-    vertexColor = vec4(a_Normal.x * 0.5 + 0.5, a_Normal.y * 0.5 + 0.5, a_Normal.z * 0.5 + 0.5, 1);
+    vertexColor = PC.colorType == 0 ? vec4(a_Normal.x * 0.5 + 0.5, a_Normal.y * 0.5 + 0.5, a_Normal.z * 0.5 + 0.5, 1) : vec4(a_Texcoord, 0.0, 1.0);
 }

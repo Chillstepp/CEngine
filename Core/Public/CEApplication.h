@@ -36,14 +36,20 @@ namespace CE{
 		virtual void OnRender(){}
 		virtual void OnDestroy(){}
 
+		virtual void OnSceneInit(CEScene* scene) {}
+		virtual void OnSceneDestroy(CEScene* scene) {}
+
 		std::chrono::steady_clock::time_point mStartTimePoint;
 		std::chrono::steady_clock::time_point mLastTimePoint;
 		std::shared_ptr<CERenderContext> mRenderContext;
 
 	 private:
 		void ParseArgs(int argc, char *argv[]);
+		bool LoadScene(const std::string& filePath = "");
+		void UnLoadScene();
 
 		std::unique_ptr<CEWindow> mWindow;
+		std::unique_ptr<CEScene> mScene;
 		AppSettings mAppSettings;
 
 		uint64_t mFrameIndex = 0;

@@ -4,6 +4,7 @@
 #include "CEApplication.h"
 #include "Render/CERenderContext.h"
 #include "CELog.h"
+#include "ECS/CEEntity.h"
 
 namespace CE{
 	CEApplicationContext CEApplication::sAppContext{};
@@ -22,13 +23,34 @@ namespace CE{
 		sAppContext.RenderContext = mRenderContext.get();
 
 		OnInit();
+		LoadScene();
 
 		mStartTimePoint = std::chrono::steady_clock::now();
 	}
 
 	void CEApplication::Stop()
 	{
+		UnLoadScene();
 		OnDestroy();
+	}
+
+	bool CEApplication::LoadScene(const std::string& filePath)
+	{
+		if(mScene) UnLoadScene();
+		mScene = std::make_unique<CEScene>();
+		OnSceneInit(mScene.get());
+		sAppContext.Scene = mScene.get();
+		return true;
+	}
+
+	void CEApplication::UnLoadScene()
+	{
+		if(mScene)
+		{
+			OnSceneDestroy(mScene.get());
+			mScene.reset();
+			sAppContext.Scene = nullptr;
+		}
 	}
 
 	void CEApplication::MainLoop()

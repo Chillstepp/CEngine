@@ -35,12 +35,32 @@ namespace CE {
         return mEntities[enttEntity].get();
     }
 
-    void CEScene::DestroyEntity(const CEEntity *entity) {
+    void CEScene::DestroyEntity(const CEEntity *entity)
+	{
+		if(entity && entity->IsValid()){
+			mEcsRegistry.destroy(entity->GetEcsEntity());
+		}
+
+		auto it = mEntities.find(entity->GetEcsEntity());
+		if(it != mEntities.end()){
+			CENode *parent = it->second->GetParent();
+			if(parent){
+				parent->RemoveChild(it->second.get());
+			}
+			mEntities.erase(it);
+		}
     }
 
-    void CEScene::DestroyAllEntity() {
+    void CEScene::DestroyAllEntity()
+	{
+		mEcsRegistry.clear();
+		mEntities.clear();
     }
 
     CEEntity * CEScene::GetEntity(entt::entity enttEntity) {
+		if(mEntities.find(enttEntity) != mEntities.end()){
+			return mEntities.at(enttEntity).get();
+		}
+		return nullptr;
     }
 }

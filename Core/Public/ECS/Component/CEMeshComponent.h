@@ -12,7 +12,7 @@
 namespace CE{
     struct CEMeshComponent : public CEComponent{
 
-      CEMesh* mesh = nullptr;
+      CEMesh* mMesh = nullptr;
 
     };
 }

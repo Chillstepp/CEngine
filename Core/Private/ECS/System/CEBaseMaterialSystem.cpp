@@ -6,10 +6,10 @@
 #include <CEFileUtil.h>
 #include <Graphics/CEDescriptorPool.h>
 #include <Graphics/CEVulkanPipeline.h>
-
 #include "Graphics/CEVulkanRenderPass.h"
 #include "CEApplication.h"
 #include "Render/CERenderContext.h"
+#include "Render/CERenderTarget.h"
 
 
 namespace CE{
@@ -18,38 +18,16 @@ namespace CE{
         CE::CEVulkanLogicDevice* device = renderContext->GetDevice();
         CE::CESwapchain* swapchain = renderContext->GetSwapchain();
 
-    	std::vector<VkDescriptorSetLayoutBinding> desctLayoutBindings = {
-    		{
-				 .binding = 0,
-				 .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-				 .descriptorCount = 1,
-				 .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
-			},
-			{
-			 .binding = 1,
-			 .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-			 .descriptorCount = 1,
-			 .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
-			},
-			{
-			 .binding = 2,
-			 .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			 .descriptorCount = 1,
-			 .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-			},
-			{
-			 .binding = 3,
-			 .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			 .descriptorCount = 1,
-			 .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-			}
-		};
-		 mDescriptorSetLayout = std::make_shared<CE::CEDescriptorSetLayout>(device, desctLayoutBindings);
-
 		 CE::ShaderLayout shaderLayout = {
-			 .descriptorSetLayouts = { mDescriptorSetLayout->GetHandle() }
+			 .pushConstants = {
+				 {
+					 .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+					 .offset = 0,
+					 .size = sizeof(PushConstants)
+				 }
+			 }
 		 };
-		 mPipelineLayout = std::make_shared<CE::CEVulkanPipelineLayout>(device, CE_RES_SHADER_DIR"02_descriptor_set.vert", CE_RES_SHADER_DIR"02_descriptor_set.frag", shaderLayout);
+		 mPipelineLayout = std::make_shared<CE::CEVulkanPipelineLayout>(device, CE_RES_SHADER_DIR"01_hello_buffer.vert", CE_RES_SHADER_DIR"01_hello_buffer.frag", shaderLayout);
 		 std::vector<VkVertexInputBindingDescription> vertexBindings = {
 			 {
 				 .binding = 0,
@@ -83,7 +61,7 @@ namespace CE{
 				 .offset = offsetof(CE::CEVertex, normal)
 			 },
 		 };
-		 mPipeline = std::make_shared<CE::CEVulkanPipeline>(device, mRenderPass.get(), mPipelineLayout.get());
+		 mPipeline = std::make_shared<CE::CEVulkanPipeline>(device, renderPass, mPipelineLayout.get());
 		 mPipeline->SetVertexInputState(vertexBindings, vertexAttrs);
 		 mPipeline->SetInputAssemblyState(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)->EnableDepthTest();
 		 mPipeline->SetDynamicState({ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR });
@@ -92,11 +70,57 @@ namespace CE{
 
     }
 
-    void CEBaseMaterialSystem::OnRender(VkCommandBuffer cmdBuffer, CERenderTarget *renderTarget) {
+    void CEBaseMaterialSystem::OnRender(VkCommandBuffer cmdBuffer, CERenderTarget *renderTarget)
+	{
+		CE::CEApplicationContext *appCxt = CEApplication::GetAppContext();
+		CE::CEApplication *device = appCxt->App;
+		CE::CEScene* scene = appCxt->Scene;
+		if(!scene) return;
 
+		entt::registry& registry = scene->GetEcsRegistry();
+		auto view = registry.view<CETransformComponent, CEMeshComponent, CEBaseMaterialComponent>();
+		if(view.begin() == view.end()) return;
+
+		mPipeline->Bind(cmdBuffer);
+
+		CE::CEVulkanFrameBuffer *frameBuffer = renderTarget->GetFrameBuffer();
+		VkViewport viewport = {
+			.x = 0,
+			.y = 0,
+			.width = static_cast<float>(frameBuffer->GetWidth()),
+			.height = static_cast<float>(frameBuffer->GetHeight()),
+			.minDepth = 0.f,
+			.maxDepth = 1.f
+		};
+		vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
+		VkRect2D scissor = {
+			.offset = { 0, 0 },
+			.extent = { frameBuffer->GetWidth(), frameBuffer->GetHeight() }
+		};
+		vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
+
+
+
+		glm::mat4 projMat = glm::perspective(glm::radians(65.f), frameBuffer->GetWidth() * 1.f / frameBuffer->GetHeight(), 0.01f, 100.f);
+		projMat[1][1] *= -1.f;
+		glm::mat4 viewMat = glm::lookAt(glm::vec3{ 0, 0, 1.5f }, glm::vec3{ 0, 0, -1 }, glm::vec3{ 0, 1, 0 });
+
+		// setup custom params
+		view.each([this, &cmdBuffer, &projMat, &viewMat](const auto &e, const CETransformComponent &transComp, const CEMeshComponent &meshComp, const CEBaseMaterialComponent &materialComp){
+		  // mesh list draw
+		  if(meshComp.mMesh){
+			  PushConstants pushConstants {
+				  .matrix = projMat * viewMat * transComp.GetTransform(),
+				  .colorType = static_cast<uint32_t>(materialComp.colorType)
+			  };
+			  vkCmdPushConstants(cmdBuffer, mPipelineLayout->GetHandle(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
+			  meshComp.mMesh->Draw(cmdBuffer);
+		  }
+		});
     }
 
     void CEBaseMaterialSystem::OnDestroy() {
-
+		mPipeline.reset();
+		mPipelineLayout.reset();
     }
 }

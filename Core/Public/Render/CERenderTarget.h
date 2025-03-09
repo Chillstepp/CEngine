@@ -7,6 +7,7 @@
 
 #include "Graphics/CEVulkanFrameBuffer.h"
 #include "Render/CERenderContext.h"
+#include "ECS/CESystem.h"
 
 namespace CE{
 	class CERenderTarget{
@@ -28,11 +29,27 @@ namespace CE{
 		void SetColorClearValue(uint32_t attachmentIndex, VkClearColorValue colorClearValue);
 		void SetDepthStencilClearValue(VkClearDepthStencilValue depthStencilValue);
 		void SetDepthStencilClearValue(uint32_t attachmentIndex, VkClearDepthStencilValue depthStencilValue);
+
+		template<typename T, typename... Args>
+		void AddMaterialSystem(Args&&... args) {
+			std::shared_ptr<CEMaterialSystem> system = std::make_shared<T>(std::forward<Args>(args)...);
+			system->OnInit(mRenderPass);
+			mMaterialSystemList.push_back(system);
+		}
+
+		void RenderMaterialSystems(VkCommandBuffer cmdBuffer) {
+			for (auto &item: mMaterialSystemList){
+				item->OnRender(cmdBuffer, this);
+			}
+		}
+
+
 	 private:
 		void Init();
 		void ReCreate();
 
 		std::vector<std::shared_ptr<CEVulkanFrameBuffer>> mFrameBuffers;
+		std::vector<std::shared_ptr<CEMaterialSystem>> mMaterialSystemList;
 
 		CEVulkanRenderPass* mRenderPass;
 		std::vector<VkClearValue> mClearValues;
